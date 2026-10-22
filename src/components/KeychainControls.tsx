@@ -241,23 +241,103 @@ export const KeychainControls: React.FC<KeychainControlsProps> = ({ params, onCh
             </div>
           </div>
 
-          {/* Joint Clearance */}
-          <div>
-            <div className="flex justify-between text-xs font-medium text-slate-300 mb-1">
-              <span>Folga da Articulação (Tolerância Print-in-Place):</span>
-              <span className="text-emerald-400 font-mono font-bold">{params.flexiJointClearance || 0.40} mm</span>
+          {/* Joint Clearance & Looseness (Print-in-Place Anti-Fusion Controls) */}
+          <div className="p-3.5 bg-slate-950/70 rounded-xl border border-indigo-500/30 space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-emerald-400" /> Folga da Articulação (Frouxa / Solta):
+              </label>
+              <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-bold border ${
+                (params.flexiJointClearance || 0.85) < 0.60
+                  ? 'bg-amber-950/40 text-amber-300 border-amber-700/50'
+                  : (params.flexiJointClearance || 0.85) <= 0.95
+                  ? 'bg-emerald-950/40 text-emerald-300 border-emerald-700/50'
+                  : 'bg-cyan-950/40 text-cyan-300 border-cyan-700/50'
+              }`}>
+                {(params.flexiJointClearance || 0.85).toFixed(2)} mm
+              </span>
             </div>
-            <input
-              type="range"
-              min={0.30}
-              max={0.55}
-              step={0.05}
-              value={params.flexiJointClearance || 0.40}
-              onChange={(e) => update({ flexiJointClearance: Number(e.target.value) })}
-              className="w-full accent-emerald-500 cursor-pointer"
-            />
-            <div className="text-[11px] text-slate-400 mt-1">
-              Folga calibrada de 0.40 mm: o pino vertical fica solto dentro do olhal da letra seguinte, permitindo giro suave sem fundir no fatiador!
+
+            {/* Quick Tolerance Presets */}
+            <div>
+              <span className="text-[11px] text-slate-400 block mb-1.5 font-medium">Ajustes Rápidos de Folga:</span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                {[
+                  { val: 0.50, label: 'Firme', tag: '0.50mm' },
+                  { val: 0.70, label: 'Padrão', tag: '0.70mm' },
+                  { val: 0.85, label: 'Solto ⭐', tag: '0.85mm', rec: true },
+                  { val: 1.10, label: 'Super Frouxo', tag: '1.10mm' },
+                ].map((preset) => {
+                  const isCurrent = Math.abs((params.flexiJointClearance || 0.85) - preset.val) < 0.03;
+                  return (
+                    <button
+                      key={preset.val}
+                      type="button"
+                      onClick={() => update({ flexiJointClearance: preset.val })}
+                      className={`p-2 rounded-lg text-left border transition-all ${
+                        isCurrent
+                          ? preset.rec
+                            ? 'bg-emerald-600/30 border-emerald-400 text-white ring-1 ring-emerald-400 shadow-sm shadow-emerald-500/20'
+                            : 'bg-indigo-600/30 border-indigo-400 text-white ring-1 ring-indigo-400 shadow-sm'
+                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="text-xs font-bold leading-tight">{preset.label}</div>
+                      <div className="text-[10px] text-slate-400 font-mono mt-0.5">{preset.tag}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Continuous Clearance Slider */}
+            <div>
+              <div className="flex justify-between text-[11px] text-slate-400 mb-1">
+                <span>Ajuste Fino da Folga (0.40 a 1.30 mm):</span>
+                <span className="text-slate-300 font-medium">
+                  {(params.flexiJointClearance || 0.85) < 0.60
+                    ? 'Apertado (Risco de fundir)'
+                    : (params.flexiJointClearance || 0.85) <= 0.95
+                    ? 'Folga Macia (Recomendado)'
+                    : 'Folga Máxima (Anti-Fusão)'}
+                </span>
+              </div>
+              <input
+                type="range"
+                min={0.40}
+                max={1.30}
+                step={0.05}
+                value={params.flexiJointClearance || 0.85}
+                onChange={(e) => update({ flexiJointClearance: Number(e.target.value) })}
+                className="w-full accent-emerald-500 cursor-pointer"
+              />
+              <div className="flex justify-between text-[10px] text-slate-500 px-0.5 mt-0.5">
+                <span>0.40 mm (Apertado)</span>
+                <span className="text-emerald-400 font-bold">0.85 mm (Ideal FDM)</span>
+                <span>1.30 mm (Ultra Frouxo)</span>
+              </div>
+            </div>
+
+            {/* Segment Gap Slider */}
+            <div className="pt-2 border-t border-slate-800/80">
+              <div className="flex justify-between text-xs font-medium text-slate-300 mb-1">
+                <span>Espaçamento entre Letras (Distância das Paredes):</span>
+                <span className="text-indigo-400 font-mono font-bold">
+                  {(params.flexiSegmentGap || 5.6).toFixed(1)} mm
+                </span>
+              </div>
+              <input
+                type="range"
+                min={4.5}
+                max={8.5}
+                step={0.5}
+                value={params.flexiSegmentGap || 5.6}
+                onChange={(e) => update({ flexiSegmentGap: Number(e.target.value) })}
+                className="w-full accent-indigo-500 cursor-pointer"
+              />
+              <div className="text-[11px] text-slate-400 mt-1">
+                Espaço extra entre as letras para que as laterais não encostem nem travem quando as articulações giram.
+              </div>
             </div>
           </div>
 
@@ -315,14 +395,31 @@ export const KeychainControls: React.FC<KeychainControlsProps> = ({ params, onCh
                 35° Serpente Flexi
               </button>
             </div>
-            <div className="p-2.5 bg-emerald-950/40 rounded-xl border border-emerald-800/60 mt-2 space-y-1">
+
+            {/* Anti-Fusion 3D Printing Guide */}
+            <div className="p-3 bg-slate-950/80 rounded-xl border border-emerald-500/40 mt-3 space-y-2">
               <div className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                Mecanismo Print-in-Place 100% Flexível:
+                Guia Anti-Fusão para Impressão 3D Perfeita:
               </div>
-              <p className="text-[11px] text-slate-300 leading-relaxed">
-                As articulações são formadas por pinos cativos verticais e olhais com folga livre de 0.40mm. As letras não são fixas: elas giram livremente no plano horizontal e podem ser balançadas diretamente no visualizador 3D acima!
-              </p>
+              <ul className="text-[11px] text-slate-300 space-y-1.5 leading-relaxed pl-1">
+                <li className="flex items-start gap-1.5">
+                  <span className="text-emerald-400 font-bold shrink-0">•</span>
+                  <span><strong>Altura de Camada:</strong> imprima com 0.16mm ou 0.20mm (não use 0.28mm para evitar degraus no pino).</span>
+                </li>
+                <li className="flex items-start gap-1.5">
+                  <span className="text-emerald-400 font-bold shrink-0">•</span>
+                  <span><strong>Sem Suportes (Supports: OFF):</strong> o mecanismo possui chanfros autoportantes de 45°. Se ativar suporte, ele vai travar a junta!</span>
+                </li>
+                <li className="flex items-start gap-1.5">
+                  <span className="text-emerald-400 font-bold shrink-0">•</span>
+                  <span><strong>Primeiro Uso:</strong> espere a peça esfriar na mesa. Segure duas letras e faça uma leve torção manual (um suave estalo soltará qualquer micro-teia e o chaveiro ficará 100% livre e solto!).</span>
+                </li>
+                <li className="flex items-start gap-1.5">
+                  <span className="text-emerald-400 font-bold shrink-0">•</span>
+                  <span><strong>Posição da Costura (Z-Seam):</strong> coloque como "Aleatória" ou "Traseira" no fatiador para não formar relevo no diâmetro do pino.</span>
+                </li>
+              </ul>
             </div>
           </div>
         </div>

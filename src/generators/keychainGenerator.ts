@@ -544,29 +544,40 @@ function generateFlexiArticulatedKeychain(params: KeychainParams): KeychainGeome
   const textChars = cleanChars.length > 0 ? cleanChars : ['F', 'L', 'E', 'X', 'I'];
   const fontName = FONT_CANVAS_MAP[params.font] || 'Bungee, sans-serif';
   const letterH = Math.max(18, Math.min(38, params.fontSize || 24));
-  const linkT = Math.max(3.2, Math.min(5.5, params.baseThickness || 4.2));
-  const clearance = Math.max(0.30, Math.min(0.60, params.flexiJointClearance || 0.40));
+  const linkT = Math.max(3.8, Math.min(6.5, params.baseThickness || 4.6));
+  // Parametric Looseness & Tolerances:
+  // User flexiJointClearance defaults to 0.85 mm for smooth, free, anti-fusion movement
+  const clearance = Math.max(0.40, Math.min(1.40, params.flexiJointClearance ?? 0.85));
   const holeDia = Math.max(3.0, Math.min(6.0, params.holeDiameter || 4.2));
   const tailCharm = params.tailCharm || 'heart';
   const flexiStyle: FlexiSegmentStyle = params.flexiSegmentStyle || 'pure-letters';
   const isPureLetters = flexiStyle === 'pure-letters';
   const previewFlexAngle = params.previewFlexAngle || 0; // Live articulation simulation
 
-  // Mechanical Joint Dimensions (Strict Non-Collision Print-in-Place Tolerances)
-  const rPin = 1.30; // Solid vertical pin radius (2.60mm diameter)
-  const rHole = rPin + clearance; // Through-hole radius (e.g. 1.70mm -> 3.40mm diameter)
-  const rTongue = 3.10; // Female eyelet outer radius (6.20mm diameter, 1.4mm solid wall)
-  const rFork = 3.65; // Male fork outer ear radius (7.30mm diameter, 0.55mm radial gap around tongue)
+  // Mechanical Joint Dimensions (Anti-Fusion Print-in-Place Architecture):
+  // 1. Solid vertical pin: radius 1.25mm (2.50mm diameter) - strong, smooth pivot
+  const rPin = 1.25;
+  // 2. Through-hole radius with wide radial clearance (e.g. 1.25 + 0.85 = 2.10mm -> 4.20mm hole diameter)
+  const rHole = rPin + clearance;
+  // 3. Female eyelet outer radius with solid mechanical wall
+  const tongueWall = Math.max(1.35, 1.20 + clearance * 0.15);
+  const rTongue = rHole + tongueWall;
+  // 4. Male fork outer ear radius with generous radial gap around female eyelet
+  const outerRadialGap = Math.max(0.70, clearance * 0.85);
+  const rFork = rTongue + outerRadialGap;
 
-  const cZ = 0.35; // Vertical clearance between ears and tongue (prevents layer fusing)
-  const tEar = Math.max(0.95, (linkT - 2 * cZ) * 0.32); // e.g. 1.12mm ear thickness
-  const tTongue = Math.max(1.0, linkT - 2 * tEar - 2 * cZ); // e.g. 1.26mm center tongue
+  // 5. Vertical Z-clearance (generous 3 to 4.5 layer air gap at 0.2mm layer height)
+  // Completely eliminates bridging sag and layer squish fusion between ears and tongue
+  const cZ = Math.max(0.55, Math.min(0.95, clearance * 0.70 + 0.15));
+  const tEar = Math.max(1.0, (linkT - 2 * cZ) * 0.32);
+  const tTongue = Math.max(1.1, linkT - 2 * tEar - 2 * cZ);
   const zTongue = tEar + cZ;
 
-  // Longitudinal Spacing between Letter Bodies and Joint Pin Pivot (jx)
-  // Guarantees at least 1.35mm - 1.50mm air clearance between each letter and adjacent hinge tips
-  const armFork = 4.60; // Distance from segMaxX to joint pin pivot (jx)
-  const neckTongue = 5.00; // Distance from joint pin pivot (jx) to next segMinX
+  // 6. Longitudinal Spacing between Letter Bodies and Joint Pin Pivot (jx)
+  // Ensures at least 2.4mm - 2.8mm clear air gap so adjacent letter walls never touch or fuse
+  const segmentGap = Math.max(4.5, Math.min(9.0, params.flexiSegmentGap ?? 5.6));
+  const armFork = rFork + Math.max(2.0, segmentGap * 0.38);
+  const neckTongue = Math.max(rFork + 2.4, rTongue + segmentGap * 0.45);
 
   // Step 1: Pre-generate solid 3D glyphs and measure exact physical dimensions
   const segments: SegmentInfo[] = [];
@@ -899,10 +910,10 @@ function createForkKnuckleGeometries(
   tEar: number
 ): THREE.BufferGeometry[] {
   const geos: THREE.BufferGeometry[] = [];
-  const armW = rFork * 1.85;
+  const armW = Math.max(rFork * 1.85, 7.5);
+  const rootX = segMaxX - 2.0; // penetrates 2.0mm into letter/spine body
 
   const forkShape = new THREE.Shape();
-  const rootX = segMaxX - 1.5; // penetrates 1.5mm into letter/spine body
   forkShape.moveTo(rootX, -armW / 2);
   forkShape.lineTo(jx, -rFork);
   // Semi-circle around (jx, 0) covering the right side (from -PI/2 to PI/2 counter-clockwise)
@@ -910,30 +921,49 @@ function createForkKnuckleGeometries(
   forkShape.lineTo(rootX, armW / 2);
   forkShape.closePath();
 
-  // 1. Bottom Ear (z from 0 to tEar)
+  // 1. Bottom Ear (z from 0 to tEar) with smooth 45° edge bevel
   const bottomEarGeo = new THREE.ExtrudeGeometry(forkShape, {
     depth: tEar,
     bevelEnabled: true,
     bevelSegments: 2,
-    bevelSize: 0.25,
-    bevelThickness: 0.25,
+    bevelSize: 0.3,
+    bevelThickness: 0.3,
   });
   geos.push(bottomEarGeo);
 
-  // 2. Top Ear (z from linkT - tEar to linkT)
+  // 2. Top Ear (z from linkT - tEar to linkT) with underside 45° edge bevel
   const topEarGeo = new THREE.ExtrudeGeometry(forkShape, {
     depth: tEar,
+    bevelEnabled: true,
+    bevelSegments: 2,
+    bevelSize: 0.3,
+    bevelThickness: 0.3,
+  });
+  topEarGeo.translate(0, 0, linkT - tEar);
+  geos.push(topEarGeo);
+
+  // 3. Monolithic Solid Backstop / Bridge Wall at Root (from rootX to segMaxX spanning full linkT)
+  // Physically locks bottom ear and top ear together into a rigid monolithic bracket,
+  // preventing any top ear flexing or bridging sag during printing
+  const rootBridgeShape = new THREE.Shape();
+  rootBridgeShape.moveTo(rootX, -armW / 2);
+  rootBridgeShape.lineTo(segMaxX, -armW / 2);
+  rootBridgeShape.lineTo(segMaxX, armW / 2);
+  rootBridgeShape.lineTo(rootX, armW / 2);
+  rootBridgeShape.closePath();
+
+  const rootBridgeGeo = new THREE.ExtrudeGeometry(rootBridgeShape, {
+    depth: linkT,
     bevelEnabled: true,
     bevelSegments: 2,
     bevelSize: 0.25,
     bevelThickness: 0.25,
   });
-  topEarGeo.translate(0, 0, linkT - tEar);
-  geos.push(topEarGeo);
+  geos.push(rootBridgeGeo);
 
-  // 3. Monolithic Vertical Pin
-  // Cylindrical pin along Z running continuously from z = 0 to z = linkT
-  const pinGeo = new THREE.CylinderGeometry(rPin, rPin, linkT, 24);
+  // 4. Vertical Connecting Pin
+  // Cylindrical pin along Z running continuously from z = 0 to z = linkT with 32 radial segments
+  const pinGeo = new THREE.CylinderGeometry(rPin, rPin, linkT, 32);
   pinGeo.rotateX(Math.PI / 2);
   pinGeo.translate(jx, 0, linkT / 2);
   geos.push(pinGeo);
@@ -954,10 +984,10 @@ function createTongueKnuckleGeometries(
   zTongue: number
 ): THREE.BufferGeometry[] {
   const geos: THREE.BufferGeometry[] = [];
-  const neckW = rTongue * 1.8;
+  const neckW = Math.max(rTongue * 1.8, 6.5);
+  const rootX = segMinX + 2.0; // penetrates 2.0mm into letter/spine body
 
   const tongueShape = new THREE.Shape();
-  const rootX = segMinX + 1.5; // penetrates 1.5mm into letter/spine body
   tongueShape.moveTo(rootX, neckW / 2);
   tongueShape.lineTo(jx, rTongue);
   // Semi-circle around (jx, 0) covering the left side (from PI/2 to 3*PI/2 counter-clockwise)
@@ -965,17 +995,19 @@ function createTongueKnuckleGeometries(
   tongueShape.lineTo(rootX, -neckW / 2);
   tongueShape.closePath();
 
-  // Concentric clearance hole for the pin
+  // Concentric wide clearance through-hole for the pin
   const holePath = new THREE.Path();
   holePath.absarc(jx, 0, rHole, 0, Math.PI * 2, true);
   tongueShape.holes.push(holePath);
 
+  // Extrude with 0.35mm bevel: creates 45° chamfers on both inner hole entrances
+  // and outer perimeters, completely eliminating elephant's foot or layer squish sticking!
   const tongueGeo = new THREE.ExtrudeGeometry(tongueShape, {
     depth: tTongue,
     bevelEnabled: true,
     bevelSegments: 2,
-    bevelSize: 0.2,
-    bevelThickness: 0.2,
+    bevelSize: 0.35,
+    bevelThickness: 0.35,
   });
   tongueGeo.translate(0, 0, zTongue);
   geos.push(tongueGeo);

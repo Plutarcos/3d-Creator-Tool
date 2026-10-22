@@ -133,7 +133,7 @@ export default function App() {
     subtitle: 'ENGENHARIA 3D',
     font: 'Bungee',
     fontSize: 24,
-    baseThickness: 4.2,
+    baseThickness: 4.6,
     textExtrusion: 1.8,
     baseStyle: 'pill',
     flexiSegmentStyle: 'pure-letters',
@@ -141,8 +141,8 @@ export default function App() {
     holeDiameter: 4.2,
     holePosition: 'left',
     reinforcedRing: true,
-    flexiJointClearance: 0.40,
-    flexiSegmentGap: 4.8,
+    flexiJointClearance: 0.85,
+    flexiSegmentGap: 5.6,
     tailCharm: 'heart',
     qrContent: 'https://makerworld.com',
   });
@@ -502,7 +502,23 @@ export default function App() {
       filename = `peca_tecnica_${engineeringParams.category}_OD${engineeringParams.outerDiameter || 14}mm.stl`;
     }
 
-    downloadSTL(geometry, filename);
+    let exportGeo = geometry;
+    let tempFlatGeo: THREE.BufferGeometry | null = null;
+
+    if (
+      activeMode === 'keychain' &&
+      keychainParams.type === 'flexi-articulated' &&
+      (keychainParams.previewFlexAngle || 0) !== 0
+    ) {
+      const flatKc = generateKeychainCompleteGeometries({ ...keychainParams, previewFlexAngle: 0 });
+      exportGeo = flatKc.combined;
+      tempFlatGeo = flatKc.combined;
+    }
+
+    downloadSTL(exportGeo, filename);
+    if (tempFlatGeo) {
+      tempFlatGeo.dispose();
+    }
 
     try {
       confetti({ particleCount: 80, spread: 60, origin: { y: 0.8 } });
