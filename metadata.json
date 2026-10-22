@@ -1,0 +1,6 @@
+{
+  "name": "Gerador de Modelos 3D STL & Ilusão Dual-Text",
+  "description": "Gerador paramétrico de modelos 3D imprimíveis com ilusão óptica de duas palavras/nomes por ângulo (anamórfico), relevos, litofanias, engrenagens e suportes com exportação STL instantânea.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
