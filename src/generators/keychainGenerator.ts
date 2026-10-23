@@ -53,6 +53,8 @@ function measureCharacterWidth(char: string, fontName: string, letterH: number):
  */
 interface SolidLetterResult {
   geo: THREE.BufferGeometry;
+  baseGeo: THREE.BufferGeometry;
+  reliefGeo: THREE.BufferGeometry;
   topHighlightGeo?: THREE.BufferGeometry;
   width: number;
   height: number;
@@ -66,8 +68,9 @@ function generateSolidLetterMesh(
   char: string,
   fontName: string,
   targetHeight: number,
-  depth: number,
-  options?: { topHighlightHeight?: number }
+  baseDepth: number,
+  reliefDepth: number,
+  letterScaleRatio: number = 1.0
 ): SolidLetterResult | null {
   const canvas = document.createElement('canvas');
   const res = 140;
@@ -110,18 +113,22 @@ function generateSolidLetterMesh(
   const pxW = maxPxX - minPxX + 1;
   const pxH = maxPxY - minPxY + 1;
   const scale = targetHeight / pxH;
+  const reliefScale = Math.max(0.55, Math.min(1.45, letterScaleRatio));
   const physWidth = Math.max(pxW * scale, 6.0);
   const physHeight = targetHeight;
 
   const centerPxX = (minPxX + maxPxX) / 2;
   const centerPxY = (minPxY + maxPxY) / 2;
 
-  const spanPositions: number[] = [];
-  const spanNormals: number[] = [];
-  const topPositions: number[] = [];
-  const topNormals: number[] = [];
+  const combinedPositions: number[] = [];
+  const combinedNormals: number[] = [];
+  const basePositions: number[] = [];
+  const baseNormals: number[] = [];
+  const reliefPositions: number[] = [];
+  const reliefNormals: number[] = [];
 
-  const topH = options?.topHighlightHeight || 0.8;
+  const bDepth = Math.max(0.2, baseDepth);
+  const rDepth = Math.max(0.2, reliefDepth);
 
   for (let y = 0; y < res; y++) {
     let inSpan = false;
@@ -137,68 +144,83 @@ function generateSolidLetterMesh(
         const spanLen = x - spanStart;
         const bW = spanLen * scale;
         const bH = scale * 1.04;
-        const bD = depth;
         const cx = (spanStart + spanLen / 2 - centerPxX) * scale;
         const cy = -(y + 0.5 - centerPxY) * scale;
-        const cz = depth / 2;
 
-        const box = new THREE.BoxGeometry(bW, bH, bD);
-        box.translate(cx, cy, cz);
-
-        const pos = box.getAttribute('position');
-        const norm = box.getAttribute('normal');
-        const idx = box.getIndex();
-        if (idx) {
-          for (let i = 0; i < idx.count; i++) {
-            const vi = idx.getX(i);
-            spanPositions.push(pos.getX(vi), pos.getY(vi), pos.getZ(vi));
-            spanNormals.push(norm.getX(vi), norm.getY(vi), norm.getZ(vi));
+        // 1. Lower Base Box (Z from 0 to bDepth) - 100% planar flat bottom on Z=0!
+        const baseBox = new THREE.BoxGeometry(bW, bH, bDepth);
+        baseBox.translate(cx, cy, bDepth / 2);
+        const bPos = baseBox.getAttribute('position');
+        const bNorm = baseBox.getAttribute('normal');
+        const bIdx = baseBox.getIndex();
+        if (bIdx) {
+          for (let i = 0; i < bIdx.count; i++) {
+            const vi = bIdx.getX(i);
+            basePositions.push(bPos.getX(vi), bPos.getY(vi), bPos.getZ(vi));
+            baseNormals.push(bNorm.getX(vi), bNorm.getY(vi), bNorm.getZ(vi));
+            combinedPositions.push(bPos.getX(vi), bPos.getY(vi), bPos.getZ(vi));
+            combinedNormals.push(bNorm.getX(vi), bNorm.getY(vi), bNorm.getZ(vi));
           }
         }
-        box.dispose();
+        baseBox.dispose();
 
-        // Top highlight cap for dual-color visualization/slicing
-        if (topH > 0) {
-          const topBox = new THREE.BoxGeometry(bW, bH, topH);
-          topBox.translate(cx, cy, depth + topH / 2);
-          const tPos = topBox.getAttribute('position');
-          const tNorm = topBox.getAttribute('normal');
-          const tIdx = topBox.getIndex();
-          if (tIdx) {
-            for (let i = 0; i < tIdx.count; i++) {
-              const vi = tIdx.getX(i);
-              topPositions.push(tPos.getX(vi), tPos.getY(vi), tPos.getZ(vi));
-              topNormals.push(tNorm.getX(vi), tNorm.getY(vi), tNorm.getZ(vi));
-            }
+        // 2. Raised Letter Relief Box (Z from bDepth to bDepth + rDepth)
+        // Scaled by reliefScale:
+        // - < 1.0: Smaller than base -> leaves a perimeter shelf / frame of the 1st color (base)
+        // - > 1.0: Larger than base -> expands outwards over base edges (3D bold protruding pop)
+        const rW = bW * reliefScale;
+        const rH = bH * reliefScale;
+        const rcx = cx * reliefScale;
+        const rcy = cy * reliefScale;
+
+        const reliefBox = new THREE.BoxGeometry(rW, rH, rDepth);
+        reliefBox.translate(rcx, rcy, bDepth + rDepth / 2);
+        const rPos = reliefBox.getAttribute('position');
+        const rNorm = reliefBox.getAttribute('normal');
+        const rIdx = reliefBox.getIndex();
+        if (rIdx) {
+          for (let i = 0; i < rIdx.count; i++) {
+            const vi = rIdx.getX(i);
+            reliefPositions.push(rPos.getX(vi), rPos.getY(vi), rPos.getZ(vi));
+            reliefNormals.push(rNorm.getX(vi), rNorm.getY(vi), rNorm.getZ(vi));
+            combinedPositions.push(rPos.getX(vi), rPos.getY(vi), rPos.getZ(vi));
+            combinedNormals.push(rNorm.getX(vi), rNorm.getY(vi), rNorm.getZ(vi));
           }
-          topBox.dispose();
         }
+        reliefBox.dispose();
       }
     }
   }
 
-  if (spanPositions.length === 0) return null;
+  if (combinedPositions.length === 0) return null;
 
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(spanPositions, 3));
-  geo.setAttribute('normal', new THREE.Float32BufferAttribute(spanNormals, 3));
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(combinedPositions, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(combinedNormals, 3));
 
-  let topHighlightGeo: THREE.BufferGeometry | undefined;
-  if (topPositions.length > 0) {
-    topHighlightGeo = new THREE.BufferGeometry();
-    topHighlightGeo.setAttribute('position', new THREE.Float32BufferAttribute(topPositions, 3));
-    topHighlightGeo.setAttribute('normal', new THREE.Float32BufferAttribute(topNormals, 3));
-  }
+  const baseGeo = new THREE.BufferGeometry();
+  baseGeo.setAttribute('position', new THREE.Float32BufferAttribute(basePositions, 3));
+  baseGeo.setAttribute('normal', new THREE.Float32BufferAttribute(baseNormals, 3));
+
+  const reliefGeo = new THREE.BufferGeometry();
+  reliefGeo.setAttribute('position', new THREE.Float32BufferAttribute(reliefPositions, 3));
+  reliefGeo.setAttribute('normal', new THREE.Float32BufferAttribute(reliefNormals, 3));
+
+  const maxScale = Math.max(1.0, reliefScale);
+  const effectiveWidth = Math.max(physWidth * maxScale, 6.0);
+  const effectiveHeight = physHeight * maxScale;
 
   return {
     geo,
-    topHighlightGeo,
-    width: physWidth,
-    height: physHeight,
-    minX: -physWidth / 2,
-    maxX: physWidth / 2,
-    minY: -physHeight / 2,
-    maxY: physHeight / 2,
+    baseGeo,
+    reliefGeo,
+    topHighlightGeo: reliefGeo,
+    width: effectiveWidth,
+    height: effectiveHeight,
+    minX: -effectiveWidth / 2,
+    maxX: effectiveWidth / 2,
+    minY: -effectiveHeight / 2,
+    maxY: effectiveHeight / 2,
   };
 }
 
@@ -311,7 +333,7 @@ function generateFixedNameKeychain(params: KeychainParams): KeychainGeometries {
   const subtitle = (params.subtitle || '').trim();
   const fontName = FONT_CANVAS_MAP[params.font] || 'Bungee, sans-serif';
   const baseT = Math.max(1.8, Math.min(6.0, params.baseThickness || 2.8));
-  const textT = Math.max(1.0, Math.min(4.0, params.textExtrusion || 1.6));
+  const textT = Math.max(0.4, Math.min(4.0, params.letterReliefHeight ?? params.textExtrusion ?? 1.2));
   const letterH = Math.max(16, Math.min(40, params.fontSize || 24));
   const baseStyle = params.baseStyle || 'pill';
   const holePos = params.holePosition || 'left';
@@ -384,12 +406,10 @@ function generateFixedNameKeychain(params: KeychainParams): KeychainGeometries {
     shape.holes.push(holePath);
   }
 
+  // 100% Flat bottom on Z=0 (bevelEnabled: false) ensures perfect bed adhesion without supports!
   const baseGeo = new THREE.ExtrudeGeometry(shape, {
     depth: baseT,
-    bevelEnabled: true,
-    bevelSegments: 2,
-    bevelSize: 0.5,
-    bevelThickness: 0.5,
+    bevelEnabled: false,
   });
   baseGeometries.push(baseGeo);
 
@@ -404,10 +424,7 @@ function generateFixedNameKeychain(params: KeychainParams): KeychainGeometries {
 
     const ringGeo = new THREE.ExtrudeGeometry(ringShape, {
       depth: baseT,
-      bevelEnabled: true,
-      bevelSegments: 2,
-      bevelSize: 0.4,
-      bevelThickness: 0.4,
+      bevelEnabled: false,
     });
 
     if (holePos === 'left') ringGeo.translate(-halfW - ringOuterR + 2, 0, 0);
@@ -449,10 +466,11 @@ function generateFixedNameKeychain(params: KeychainParams): KeychainGeometries {
     const spanPositions: number[] = [];
     const spanNormals: number[] = [];
 
-    const scaleX = (approxWidth * 0.82) / cw;
-    const scaleY = (plateHeight * 0.80) / ch;
-    const x0 = -approxWidth * 0.41;
-    const y0 = plateHeight * 0.40;
+    const letterScale = Math.max(0.60, Math.min(1.40, params.letterScaleRatio ?? 1.0));
+    const scaleX = (approxWidth * 0.82 * letterScale) / cw;
+    const scaleY = (plateHeight * 0.80 * letterScale) / ch;
+    const x0 = -approxWidth * 0.41 * letterScale;
+    const y0 = plateHeight * 0.40 * letterScale;
 
     for (let y = 0; y < ch; y++) {
       let inSpan = false;
@@ -544,7 +562,9 @@ function generateFlexiArticulatedKeychain(params: KeychainParams): KeychainGeome
   const textChars = cleanChars.length > 0 ? cleanChars : ['F', 'L', 'E', 'X', 'I'];
   const fontName = FONT_CANVAS_MAP[params.font] || 'Bungee, sans-serif';
   const letterH = Math.max(18, Math.min(38, params.fontSize || 24));
-  const linkT = Math.max(3.8, Math.min(6.5, params.baseThickness || 4.6));
+  const baseT = Math.max(2.0, Math.min(6.0, params.baseThickness || 2.8));
+  const reliefH = Math.max(0.4, Math.min(4.0, params.letterReliefHeight ?? params.textExtrusion ?? 1.2));
+  const letterScaleRatio = Math.max(0.55, Math.min(1.45, params.letterScaleRatio ?? 1.0));
   // Parametric Looseness & Tolerances:
   // User flexiJointClearance defaults to 0.85 mm for smooth, free, anti-fusion movement
   const clearance = Math.max(0.40, Math.min(1.40, params.flexiJointClearance ?? 0.85));
@@ -568,9 +588,9 @@ function generateFlexiArticulatedKeychain(params: KeychainParams): KeychainGeome
 
   // 5. Vertical Z-clearance (generous 3 to 4.5 layer air gap at 0.2mm layer height)
   // Completely eliminates bridging sag and layer squish fusion between ears and tongue
-  const cZ = Math.max(0.55, Math.min(0.95, clearance * 0.70 + 0.15));
-  const tEar = Math.max(1.0, (linkT - 2 * cZ) * 0.32);
-  const tTongue = Math.max(1.1, linkT - 2 * tEar - 2 * cZ);
+  const cZ = Math.max(0.42, Math.min(0.85, clearance * 0.58 + 0.10));
+  const tEar = Math.max(0.70, (baseT - 2 * cZ) * 0.32);
+  const tTongue = Math.max(0.75, baseT - 2 * tEar - 2 * cZ);
   const zTongue = tEar + cZ;
 
   // 6. Longitudinal Spacing between Letter Bodies and Joint Pin Pivot (jx)
@@ -584,9 +604,7 @@ function generateFlexiArticulatedKeychain(params: KeychainParams): KeychainGeome
 
   for (let i = 0; i < textChars.length; i++) {
     const char = textChars[i];
-    const solid = generateSolidLetterMesh(char, fontName, letterH, linkT, {
-      topHighlightHeight: isPureLetters ? 0.8 : 0,
-    });
+    const solid = generateSolidLetterMesh(char, fontName, letterH, baseT, reliefH, letterScaleRatio);
 
     if (solid) {
       const segW = isPureLetters ? Math.max(solid.width, 10.0) : Math.max(14, solid.width + 6.0);
@@ -671,7 +689,7 @@ function generateFlexiArticulatedKeychain(params: KeychainParams): KeychainGeome
     // --- A. SEGMENT BODY & STRUCTURAL CARRIER SPINE ---
     // Monolithic carrier spine guarantees that every letter stroke is 100% bonded to the hinges
     const spineHeight = isPureLetters ? 8.2 : seg.height;
-    const spineThickness = isPureLetters ? Math.min(2.4, linkT * 0.6) : linkT;
+    const spineThickness = baseT;
     const carrierSpine = createCarrierSpineGeometry(
       segMinX,
       segMaxX,
@@ -685,31 +703,37 @@ function generateFlexiArticulatedKeychain(params: KeychainParams): KeychainGeome
 
     if (!seg.isCharm) {
       if (seg.solidData) {
-        const letterGeo = seg.solidData.geo.clone();
-        letterGeo.translate(segCenterX, 0, 0);
-        segBaseGeos.push(letterGeo);
-
-        if (seg.solidData.topHighlightGeo) {
-          const topGeo = seg.solidData.topHighlightGeo.clone();
-          topGeo.translate(segCenterX, 0, 0);
-          segLetterGeos.push(topGeo);
+        if (isPureLetters) {
+          // In pure letters style, letter lower body (Z: 0 to baseT) connects to spine
+          const letterBaseGeo = seg.solidData.baseGeo.clone();
+          letterBaseGeo.translate(segCenterX, 0, 0);
+          segBaseGeos.push(letterBaseGeo);
         }
+        // Exact raised letter relief (Z: baseT to baseT + reliefH)
+        const reliefGeo = seg.solidData.reliefGeo.clone();
+        reliefGeo.translate(segCenterX, 0, 0);
+        segLetterGeos.push(reliefGeo);
       }
     } else {
-      // Articulated tail charm body
-      const charmGeo = createArticulatedTailCharm(
+      // Articulated tail charm body & 2nd color relief
+      const charmGeos = createArticulatedTailCharm(
         seg.charmType || 'heart',
         segCenterX,
         seg.width,
-        linkT
+        baseT,
+        reliefH,
+        letterScaleRatio
       );
-      segBaseGeos.push(charmGeo);
+      segBaseGeos.push(charmGeos.baseGeo);
+      if (charmGeos.reliefGeo) {
+        segLetterGeos.push(charmGeos.reliefGeo);
+      }
     }
 
     // --- B. LEFT SIDE CONNECTOR ---
     if (i === 0) {
       // First segment: Keyring Loop Eyelet
-      const ringGeos = createKeyringLoop(segMinX, holeDia, linkT);
+      const ringGeos = createKeyringLoop(segMinX, holeDia, baseT);
       segBaseGeos.push(...ringGeos);
     } else {
       // FEMALE TONGUE (Center Lug) connecting to segment i-1's male fork
@@ -734,7 +758,7 @@ function generateFlexiArticulatedKeychain(params: KeychainParams): KeychainGeome
         segMaxX,
         rFork,
         rPin,
-        linkT,
+        baseT,
         tEar
       );
       segBaseGeos.push(...forkGeos);
@@ -921,23 +945,17 @@ function createForkKnuckleGeometries(
   forkShape.lineTo(rootX, armW / 2);
   forkShape.closePath();
 
-  // 1. Bottom Ear (z from 0 to tEar) with smooth 45° edge bevel
+  // 1. Bottom Ear (z from 0 to tEar) with 100% flat bottom face resting flush on bed
   const bottomEarGeo = new THREE.ExtrudeGeometry(forkShape, {
     depth: tEar,
-    bevelEnabled: true,
-    bevelSegments: 2,
-    bevelSize: 0.3,
-    bevelThickness: 0.3,
+    bevelEnabled: false,
   });
   geos.push(bottomEarGeo);
 
-  // 2. Top Ear (z from linkT - tEar to linkT) with underside 45° edge bevel
+  // 2. Top Ear (z from linkT - tEar to linkT)
   const topEarGeo = new THREE.ExtrudeGeometry(forkShape, {
     depth: tEar,
-    bevelEnabled: true,
-    bevelSegments: 2,
-    bevelSize: 0.3,
-    bevelThickness: 0.3,
+    bevelEnabled: false,
   });
   topEarGeo.translate(0, 0, linkT - tEar);
   geos.push(topEarGeo);
@@ -954,10 +972,7 @@ function createForkKnuckleGeometries(
 
   const rootBridgeGeo = new THREE.ExtrudeGeometry(rootBridgeShape, {
     depth: linkT,
-    bevelEnabled: true,
-    bevelSegments: 2,
-    bevelSize: 0.25,
-    bevelThickness: 0.25,
+    bevelEnabled: false,
   });
   geos.push(rootBridgeGeo);
 
@@ -1019,6 +1034,7 @@ function createTongueKnuckleGeometries(
  * Creates the continuous monolithic carrier spine for a letter segment
  * Runs from (segMinX - 1.2) to (segMaxX + 1.2), guaranteeing that every letter stroke
  * is 100% bonded to the hinges and cannot detach.
+ * Bottom face is 100% flat (bevelEnabled: false) for zero-support bed adhesion!
  */
 function createCarrierSpineGeometry(
   segMinX: number,
@@ -1080,12 +1096,10 @@ function createCarrierSpineGeometry(
     shape.quadraticCurveTo(x0, -halfH, x0 + chamf, -halfH);
   }
 
+  // 100% Flat bottom on Z=0 (bevelEnabled: false) ensures perfect bed adhesion without supports!
   const geo = new THREE.ExtrudeGeometry(shape, {
     depth: thickness,
-    bevelEnabled: true,
-    bevelSegments: 2,
-    bevelSize: 0.3,
-    bevelThickness: 0.3,
+    bevelEnabled: false,
   });
   return geo;
 }
@@ -1111,10 +1125,7 @@ function createKeyringLoop(
 
   const ringGeo = new THREE.ExtrudeGeometry(ringShape, {
     depth: linkT,
-    bevelEnabled: true,
-    bevelSegments: 2,
-    bevelSize: 0.35,
-    bevelThickness: 0.35,
+    bevelEnabled: false,
   });
   geos.push(ringGeo);
 
@@ -1128,10 +1139,7 @@ function createKeyringLoop(
 
   const bridgeGeo = new THREE.ExtrudeGeometry(bridgeShape, {
     depth: linkT,
-    bevelEnabled: true,
-    bevelSegments: 2,
-    bevelSize: 0.3,
-    bevelThickness: 0.3,
+    bevelEnabled: false,
   });
   geos.push(bridgeGeo);
 
@@ -1145,8 +1153,10 @@ function createArticulatedTailCharm(
   charm: TailCharmType,
   segCenterX: number,
   size: number,
-  depth: number
-): THREE.BufferGeometry {
+  depth: number,
+  reliefDepth: number = 1.2,
+  letterScaleRatio: number = 1.0
+): { baseGeo: THREE.BufferGeometry; reliefGeo?: THREE.BufferGeometry } {
   const shape = new THREE.Shape();
   const half = size / 2;
 
@@ -1185,15 +1195,23 @@ function createArticulatedTailCharm(
     shape.absarc(0, half * 0.2, half * 0.65, 0, Math.PI * 2, false);
   }
 
-  const geo = new THREE.ExtrudeGeometry(shape, {
-    depth: depth * 0.9,
-    bevelEnabled: true,
-    bevelSegments: 2,
-    bevelSize: 0.35,
-    bevelThickness: 0.35,
+  // 1. Base Charm (Z from 0 to depth)
+  const baseGeo = new THREE.ExtrudeGeometry(shape, {
+    depth: depth,
+    bevelEnabled: false,
   });
-  geo.translate(segCenterX, 0, 0);
-  return geo;
+  baseGeo.translate(segCenterX, 0, 0);
+
+  // 2. Relief Charm (Z from depth to depth + reliefDepth) scaled by letterScaleRatio
+  const reliefScale = Math.max(0.55, Math.min(1.45, letterScaleRatio));
+  const reliefGeo = new THREE.ExtrudeGeometry(shape, {
+    depth: reliefDepth,
+    bevelEnabled: false,
+  });
+  reliefGeo.scale(reliefScale, reliefScale, 1.0);
+  reliefGeo.translate(segCenterX, 0, depth);
+
+  return { baseGeo, reliefGeo };
 }
 
 /**
@@ -1202,7 +1220,7 @@ function createArticulatedTailCharm(
 function generateQrKeychain(params: KeychainParams): KeychainGeometries {
   const size = Math.max(30, Math.min(80, params.qrSize || 50));
   const baseT = Math.max(1.8, Math.min(5.0, params.baseThickness || 2.4));
-  const raisedT = Math.max(1.0, Math.min(3.0, params.textExtrusion || 1.6));
+  const raisedT = Math.max(0.4, Math.min(3.0, params.letterReliefHeight ?? params.textExtrusion ?? 1.2));
   const holeR = (params.holeDiameter || 4.0) / 2;
 
   const baseGeometries: THREE.BufferGeometry[] = [];
@@ -1230,8 +1248,9 @@ function generateQrKeychain(params: KeychainParams): KeychainGeometries {
   ringHole.absarc(0, half + ringOuterR - 1, holeR, 0, Math.PI * 2, true);
   ringShape.holes.push(ringHole);
 
-  const baseGeo = new THREE.ExtrudeGeometry(baseShape, { depth: baseT, bevelEnabled: true, bevelSize: 0.5, bevelThickness: 0.5 });
-  const ringGeo = new THREE.ExtrudeGeometry(ringShape, { depth: baseT, bevelEnabled: true, bevelSize: 0.4, bevelThickness: 0.4 });
+  // 100% Flat bottom on Z=0
+  const baseGeo = new THREE.ExtrudeGeometry(baseShape, { depth: baseT, bevelEnabled: false });
+  const ringGeo = new THREE.ExtrudeGeometry(ringShape, { depth: baseT, bevelEnabled: false });
   baseGeometries.push(baseGeo, ringGeo);
 
   // Generate QR Matrix Pattern (21x21 modules standard QR)

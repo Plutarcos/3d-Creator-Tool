@@ -133,8 +133,11 @@ export default function App() {
     subtitle: 'ENGENHARIA 3D',
     font: 'Bungee',
     fontSize: 24,
-    baseThickness: 4.6,
-    textExtrusion: 1.8,
+    baseThickness: 2.8,
+    textExtrusion: 1.2,
+    letterReliefHeight: 1.2,
+    flatBottom: true,
+    slicerLayerHeight: 0.20,
     baseStyle: 'pill',
     flexiSegmentStyle: 'pure-letters',
     previewFlexAngle: 0,
@@ -144,6 +147,8 @@ export default function App() {
     flexiJointClearance: 0.85,
     flexiSegmentGap: 5.6,
     tailCharm: 'heart',
+    letterScaleRatio: 1.0,
+    letterSizePreset: 'standard',
     qrContent: 'https://makerworld.com',
   });
 
@@ -562,11 +567,23 @@ export default function App() {
       }
     } else if (activeMode === 'keychain') {
       prefix = `chaveiro_${keychainParams.text}`;
-      if (multiGeos.baseGeo && multiGeos.baseGeo.getAttribute('position')) {
-        parts.push({ name: '01_Base_Chaveiro', geometry: multiGeos.baseGeo });
+      let targetBase = multiGeos.baseGeo;
+      let targetLetters = multiGeos.lettersGeo;
+
+      if (
+        keychainParams.type === 'flexi-articulated' &&
+        (keychainParams.previewFlexAngle || 0) !== 0
+      ) {
+        const flatKc = generateKeychainCompleteGeometries({ ...keychainParams, previewFlexAngle: 0 });
+        targetBase = flatKc.baseGeo;
+        targetLetters = flatKc.lettersGeo;
       }
-      if (multiGeos.lettersGeo && multiGeos.lettersGeo.getAttribute('position')) {
-        parts.push({ name: '02_Letras_Relevo', geometry: multiGeos.lettersGeo });
+
+      if (targetBase && targetBase.getAttribute('position')) {
+        parts.push({ name: '01_Base_Chaveiro', geometry: targetBase });
+      }
+      if (targetLetters && targetLetters.getAttribute('position')) {
+        parts.push({ name: '02_Letras_Relevo', geometry: targetLetters });
       }
     } else if (activeMode === 'desk-nameplate') {
       prefix = `placa_${nameplateParams.title.replace(/\s+/g, '_')}`;

@@ -7,7 +7,21 @@ import {
   TailCharmType,
   FlexiSegmentStyle,
 } from '../types';
-import { KeyRound, Sparkles, Type, Sliders, Layers, QrCode, Heart, MoveHorizontal, CheckCircle2 } from 'lucide-react';
+import {
+  KeyRound,
+  Sparkles,
+  Type,
+  Sliders,
+  Layers,
+  QrCode,
+  Heart,
+  MoveHorizontal,
+  CheckCircle2,
+  Palette,
+  Maximize2,
+  Minimize2,
+  ZoomOut,
+} from 'lucide-react';
 
 interface KeychainControlsProps {
   params: KeychainParams;
@@ -449,16 +463,386 @@ export const KeychainControls: React.FC<KeychainControlsProps> = ({ params, onCh
         </div>
       )}
 
+      {/* Letter Relief Height & Base Slicing Configuration (Troca de Filamento Manual / M600) */}
+      <div className="p-4 bg-slate-900/90 rounded-2xl border border-indigo-500/40 space-y-4 shadow-lg">
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-bold text-slate-100 flex items-center gap-2">
+            <Layers className="w-4 h-4 text-rose-400" /> Altura do Relevo das Letras & Troca de Cor
+          </label>
+          <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-rose-950/60 text-rose-300 border border-rose-700/50">
+            Relevo: {(params.letterReliefHeight ?? params.textExtrusion ?? 1.2).toFixed(2)} mm
+          </span>
+        </div>
+
+        {/* 1. Exact Letter Relief Height Slider & Presets */}
+        <div className="space-y-3 bg-slate-950/70 p-3.5 rounded-xl border border-slate-800">
+          <div>
+            <div className="flex justify-between text-xs font-medium text-slate-200 mb-1">
+              <span>Altura Exata das Letras (Relevo / Outra Cor):</span>
+              <span className="text-rose-400 font-mono font-bold">
+                {(params.letterReliefHeight ?? params.textExtrusion ?? 1.2).toFixed(2)} mm
+              </span>
+            </div>
+            <input
+              type="range"
+              min={0.4}
+              max={3.0}
+              step={0.1}
+              value={params.letterReliefHeight ?? params.textExtrusion ?? 1.2}
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                update({ letterReliefHeight: val, textExtrusion: val });
+              }}
+              className="w-full accent-rose-500 cursor-pointer"
+            />
+          </div>
+
+          {/* Quick presets for exact layer counts */}
+          <div>
+            <span className="text-[11px] text-slate-400 block mb-1.5 font-medium">
+              Alturas Recomendadas para Camada 0.20mm:
+            </span>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+              {[
+                { val: 0.6, label: '0.60 mm', sub: '3 camadas' },
+                { val: 0.8, label: '0.80 mm', sub: '4 camadas' },
+                { val: 1.2, label: '1.20 mm ⭐', sub: '6 camadas (Ideal)', rec: true },
+                { val: 1.6, label: '1.60 mm', sub: '8 camadas (Alto)' },
+              ].map((preset) => {
+                const currentRelief = params.letterReliefHeight ?? params.textExtrusion ?? 1.2;
+                const isSelected = Math.abs(currentRelief - preset.val) < 0.05;
+                return (
+                  <button
+                    key={preset.val}
+                    type="button"
+                    onClick={() => update({ letterReliefHeight: preset.val, textExtrusion: preset.val })}
+                    className={`p-2 rounded-lg text-left border transition-all ${
+                      isSelected
+                        ? preset.rec
+                          ? 'bg-rose-600/30 border-rose-400 text-white ring-1 ring-rose-400 shadow-sm'
+                          : 'bg-indigo-600/30 border-indigo-400 text-white ring-1 ring-indigo-400 shadow-sm'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="text-xs font-bold leading-tight">{preset.label}</div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">{preset.sub}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* 2. Proporção & Tamanho da 2ª Cor (Menor ou Maior que a Base / Efeito 3D Personalizado) */}
+        <div className="space-y-3 bg-slate-950/70 p-3.5 rounded-xl border border-rose-500/30">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
+              <Palette className="w-4 h-4 text-rose-400" /> Tamanho da 2ª Cor vs. Base (Efeito 3D):
+            </label>
+            <span
+              className={`px-2.5 py-0.5 rounded-full text-xs font-mono font-bold border ${
+                (params.letterScaleRatio ?? 1.0) < 0.95
+                  ? 'bg-cyan-950/50 text-cyan-300 border-cyan-700/60'
+                  : (params.letterScaleRatio ?? 1.0) <= 1.05
+                  ? 'bg-emerald-950/50 text-emerald-300 border-emerald-700/60'
+                  : 'bg-amber-950/50 text-amber-300 border-amber-700/60'
+              }`}
+            >
+              {(params.letterScaleRatio ?? 1.0) < 0.95
+                ? `Recuada ${Math.round((params.letterScaleRatio ?? 1.0) * 100)}% (Moldura)`
+                : (params.letterScaleRatio ?? 1.0) <= 1.05
+                ? 'Alinhada 100% (1:1)'
+                : `Saliente ${Math.round((params.letterScaleRatio ?? 1.0) * 100)}% (3D Bold)`}
+            </span>
+          </div>
+
+          {/* Quick presets */}
+          <div>
+            <span className="text-[11px] text-slate-400 block mb-1.5 font-medium">
+              Efeitos Rápidos de Proporção 3D:
+            </span>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+              {[
+                {
+                  id: 'inset-frame',
+                  val: 0.80,
+                  label: 'Recuada 80%',
+                  sub: 'Moldura Larga',
+                  icon: ZoomOut,
+                },
+                {
+                  id: 'slight-inset',
+                  val: 0.90,
+                  label: 'Discreta 90%',
+                  sub: 'Degrau Suave',
+                  icon: Minimize2,
+                },
+                {
+                  id: 'standard',
+                  val: 1.00,
+                  label: 'Padrão 100%',
+                  sub: 'Alinhada 1:1',
+                  icon: Layers,
+                },
+                {
+                  id: 'outset-bold',
+                  val: 1.15,
+                  label: 'Saliente 115% ⭐',
+                  sub: 'Efeito 3D Pop',
+                  icon: Maximize2,
+                  rec: true,
+                },
+              ].map((preset) => {
+                const currentRatio = params.letterScaleRatio ?? 1.0;
+                const isSelected = Math.abs(currentRatio - preset.val) < 0.04;
+                const Icon = preset.icon;
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() =>
+                      update({
+                        letterScaleRatio: preset.val,
+                        letterSizePreset: preset.id as any,
+                      })
+                    }
+                    className={`p-2 rounded-lg text-left border transition-all ${
+                      isSelected
+                        ? preset.rec
+                          ? 'bg-amber-600/30 border-amber-400 text-white ring-1 ring-amber-400 shadow-sm shadow-amber-500/20'
+                          : 'bg-indigo-600/30 border-indigo-400 text-white ring-1 ring-indigo-400 shadow-sm'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <Icon className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                      <span className="text-xs font-bold leading-tight truncate">{preset.label}</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 leading-tight">{preset.sub}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Continuous Scale Slider */}
+          <div className="space-y-1.5 pt-1">
+            <div className="flex justify-between text-xs font-medium text-slate-300">
+              <span>Ajuste Fino da Escala (65% a 135%):</span>
+              <span className="font-mono font-bold text-rose-400">
+                {Math.round((params.letterScaleRatio ?? 1.0) * 100)}%
+                {(params.letterScaleRatio ?? 1.0) < 1.0 ? (
+                  <span className="text-cyan-400 text-[11px] ml-1 font-normal">
+                    ({Math.round(((params.letterScaleRatio ?? 1.0) - 1.0) * 100)}% menor)
+                  </span>
+                ) : (params.letterScaleRatio ?? 1.0) > 1.0 ? (
+                  <span className="text-amber-400 text-[11px] ml-1 font-normal">
+                    (+{Math.round(((params.letterScaleRatio ?? 1.0) - 1.0) * 100)}% maior)
+                  </span>
+                ) : (
+                  <span className="text-emerald-400 text-[11px] ml-1 font-normal">(1:1 exato)</span>
+                )}
+              </span>
+            </div>
+            <input
+              type="range"
+              min={0.65}
+              max={1.35}
+              step={0.05}
+              value={params.letterScaleRatio ?? 1.0}
+              onChange={(e) =>
+                update({
+                  letterScaleRatio: Number(e.target.value),
+                  letterSizePreset: 'custom',
+                })
+              }
+              className="w-full accent-rose-500 cursor-pointer"
+            />
+            <div className="flex justify-between text-[10px] text-slate-500 px-0.5">
+              <span>65% (Super Recuada)</span>
+              <span className="text-slate-400 font-bold">100% (Face Alinhada)</span>
+              <span>135% (Ultra Saliente)</span>
+            </div>
+          </div>
+
+          {/* Interactive visual diagram explaining the 3D aesthetic */}
+          <div className="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[11px] flex items-center gap-3">
+            <div className="w-14 h-12 bg-slate-800 rounded flex items-center justify-center shrink-0 border border-slate-700 relative overflow-hidden">
+              {/* Simulated base */}
+              <div className="w-11 h-9 rounded bg-indigo-950 border border-indigo-500/60 flex items-center justify-center relative">
+                {/* Simulated letters relief */}
+                <div
+                  style={{
+                    width: `${Math.round(28 * (params.letterScaleRatio ?? 1.0))}px`,
+                    height: `${Math.round(20 * (params.letterScaleRatio ?? 1.0))}px`,
+                  }}
+                  className="rounded-sm bg-rose-500/90 border border-rose-300 flex items-center justify-center text-[8px] font-black text-white shadow-sm transition-all duration-150"
+                >
+                  3D
+                </div>
+              </div>
+            </div>
+            <div className="space-y-0.5 text-slate-300">
+              <div className="font-bold text-slate-200">
+                {(params.letterScaleRatio ?? 1.0) < 0.95
+                  ? '✨ Efeito Moldura 3D (2ª Cor Menor que a Base)'
+                  : (params.letterScaleRatio ?? 1.0) <= 1.05
+                  ? '⚖️ Efeito Nivelado (2ª Cor Alinhada com a Base)'
+                  : '🚀 Efeito 3D Saliente / Bold (2ª Cor Maior que a Base)'}
+              </div>
+              <p className="text-[10px] text-slate-400 leading-relaxed">
+                {(params.letterScaleRatio ?? 1.0) < 0.95
+                  ? 'A 1ª cor (base) forma uma moldura/degrau contrastante em volta das letras, deixando o relevo protegido e destacado com elegância.'
+                  : (params.letterScaleRatio ?? 1.0) <= 1.05
+                  ? 'As letras acompanham o perímetro exato dos elos da base para um visual clássico e proporcional.'
+                  : 'As letras transbordam para fora da base como uma tampa volumosa, gerando sombras marcadas e um efeito de alto relevo flutuante espetacular!'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* 3. Base Thickness */}
+        <div className="space-y-2 bg-slate-950/70 p-3.5 rounded-xl border border-slate-800">
+          <div className="flex justify-between text-xs font-medium text-slate-200">
+            <span>Espessura da Base / Elos Articulados:</span>
+            <span className="text-indigo-400 font-mono font-bold">{(params.baseThickness || 2.8).toFixed(2)} mm</span>
+          </div>
+          <input
+            type="range"
+            min={2.0}
+            max={5.0}
+            step={0.2}
+            value={params.baseThickness || 2.8}
+            onChange={(e) => update({ baseThickness: Number(e.target.value) })}
+            className="w-full accent-indigo-500 cursor-pointer"
+          />
+          <div className="flex justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-800/60">
+            <span>Altura Total do Modelo (Base + Letras):</span>
+            <span className="text-emerald-400 font-mono font-bold">
+              {((params.baseThickness || 2.8) + (params.letterReliefHeight ?? params.textExtrusion ?? 1.2)).toFixed(2)} mm
+            </span>
+          </div>
+        </div>
+
+        {/* 4. Flat Bottom Print-Bed Optimization Badge */}
+        <div className="p-3 bg-emerald-950/30 rounded-xl border border-emerald-500/40 flex items-start gap-2.5">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <div className="text-xs font-bold text-emerald-300">
+              Fundo 100% Reto Ativo (Zero Suportes na Mesa)
+            </div>
+            <div className="text-[11px] text-slate-300 leading-relaxed">
+              A face inferior é estritamente plana e coplanar no <strong>Z = 0</strong>, sem chanfros inferiores. Toda a área do modelo adere diretamente à mesa de impressão, <strong>dispensando 100% do uso de suportes</strong>!
+            </div>
+          </div>
+        </div>
+
+        {/* 5. Slicer Pause / M600 Filament Change Calculator */}
+        {(() => {
+          const layerH = params.slicerLayerHeight || 0.20;
+          const baseH = params.baseThickness || 2.8;
+          const reliefH = params.letterReliefHeight ?? params.textExtrusion ?? 1.2;
+          const totalH = baseH + reliefH;
+          const baseLayers = Math.round(baseH / layerH);
+          const pauseLayer = baseLayers + 1;
+          const totalLayers = Math.round(totalH / layerH);
+
+          return (
+            <div className="p-3.5 bg-slate-950 rounded-xl border border-indigo-500/30 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                  <Sliders className="w-3.5 h-3.5 text-indigo-400" /> Calculadora de Troca no Fatiador (M600)
+                </span>
+                {/* Layer Height Chooser */}
+                <div className="flex gap-1 text-[10px]">
+                  {[0.16, 0.20, 0.28].map((lh) => (
+                    <button
+                      key={lh}
+                      type="button"
+                      onClick={() => update({ slicerLayerHeight: lh })}
+                      className={`px-2 py-0.5 rounded font-mono font-bold transition-all ${
+                        layerH === lh
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-slate-900 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {lh.toFixed(2)}mm
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Visual Layer Stack Bar */}
+              <div className="space-y-1">
+                <div className="h-4 rounded-lg overflow-hidden flex border border-slate-700 text-[10px] font-bold font-mono">
+                  <div
+                    style={{ width: `${(baseH / totalH) * 100}%` }}
+                    className="bg-indigo-600/80 text-white flex items-center justify-center truncate px-1"
+                    title={`Base: ${baseH.toFixed(2)}mm (${baseLayers} camadas)`}
+                  >
+                    Cor 1: Base (1 a {baseLayers})
+                  </div>
+                  <div
+                    style={{ width: `${(reliefH / totalH) * 100}%` }}
+                    className="bg-rose-500 text-white flex items-center justify-center truncate px-1 shadow-inner"
+                    title={`Relevo: ${reliefH.toFixed(2)}mm (${totalLayers - baseLayers} camadas)`}
+                  >
+                    Cor 2: Letras ({pauseLayer} a {totalLayers})
+                  </div>
+                </div>
+                <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                  <span>Z = 0.00 mm (Mesa)</span>
+                  <span className="text-amber-400 font-bold">⚡ Pausa em Z = {baseH.toFixed(2)} mm</span>
+                  <span>Topo = {totalH.toFixed(2)} mm</span>
+                </div>
+              </div>
+
+              {/* Exact Metrics Box */}
+              <div className="grid grid-cols-3 gap-2 text-center p-2 bg-slate-900/80 rounded-lg border border-slate-800">
+                <div>
+                  <div className="text-[10px] text-slate-400">Altura de Pausa</div>
+                  <div className="text-xs font-mono font-bold text-amber-300">Z = {baseH.toFixed(2)} mm</div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-slate-400">Camada de Troca</div>
+                  <div className="text-xs font-mono font-bold text-rose-400">Camada #{pauseLayer}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-slate-400">Total Camadas</div>
+                  <div className="text-xs font-mono font-bold text-emerald-400">{totalLayers} camadas</div>
+                </div>
+              </div>
+
+              {/* Slicer Quick Instructions */}
+              <div className="text-[11px] text-slate-300 space-y-1 bg-slate-900/50 p-2.5 rounded-lg border border-slate-800/60">
+                <div className="font-semibold text-slate-200">Como configurar no seu fatiador:</div>
+                <ul className="space-y-1 text-[10px] text-slate-400 list-disc pl-3.5">
+                  <li>
+                    <strong className="text-slate-200">Bambu Studio / OrcaSlicer:</strong> fatie o modelo, role a barra vertical até a <strong>Camada #{pauseLayer}</strong>, clique com o botão direito e escolha <em>"Adicionar Pausa"</em> ou <em>"Mudar Filamento"</em>.
+                  </li>
+                  <li>
+                    <strong className="text-slate-200">PrusaSlicer:</strong> na barra de camadas à direita na <strong>Camada #{pauseLayer}</strong>, clique com o botão direito no ícone de cruz laranja e selecione <em>"Add color change (M600)"</em>.
+                  </li>
+                  <li>
+                    <strong className="text-slate-200">Cura:</strong> menu <em>Extensões &gt; Pós-processamento &gt; Modificar G-Code &gt; Adicionar Script &gt; Pause at height</em> &gt; defina <em>Pause at: Layer Number #{pauseLayer}</em> ou <em>Height {baseH.toFixed(2)}mm</em>.
+                  </li>
+                </ul>
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+
       {/* Dimensions & Hole Configuration */}
       <div className="p-4 bg-slate-900/80 rounded-2xl border border-slate-800 space-y-4">
         <label className="block text-sm font-bold text-slate-200 flex items-center gap-2">
-          <Sliders className="w-4 h-4 text-indigo-400" /> Dimensões & Argola do Chaveiro
+          <Sliders className="w-4 h-4 text-indigo-400" /> Tamanho da Fonte & Argola do Chaveiro
         </label>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <div className="flex justify-between text-xs font-medium text-slate-300 mb-1">
-              <span>Altura das Letras:</span>
+              <span>Tamanho da Fonte (Altura das Letras):</span>
               <span className="text-indigo-400 font-mono font-bold">{params.fontSize} mm</span>
             </div>
             <input
@@ -468,22 +852,6 @@ export const KeychainControls: React.FC<KeychainControlsProps> = ({ params, onCh
               step={2}
               value={params.fontSize}
               onChange={(e) => update({ fontSize: Number(e.target.value) })}
-              className="w-full accent-indigo-500 cursor-pointer"
-            />
-          </div>
-
-          <div>
-            <div className="flex justify-between text-xs font-medium text-slate-300 mb-1">
-              <span>Espessura da Base/Elos:</span>
-              <span className="text-indigo-400 font-mono font-bold">{params.baseThickness} mm</span>
-            </div>
-            <input
-              type="range"
-              min={3.2}
-              max={5.6}
-              step={0.2}
-              value={params.baseThickness}
-              onChange={(e) => update({ baseThickness: Number(e.target.value) })}
               className="w-full accent-indigo-500 cursor-pointer"
             />
           </div>

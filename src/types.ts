@@ -157,18 +157,24 @@ export interface KeychainParams {
   font: FontChoice;
   fontSize: number; // mm height of letters
   baseStyle: KeychainBaseStyle;
-  baseThickness: number; // mm (e.g. 2.4)
-  textExtrusion: number; // mm (e.g. 1.8)
+  baseThickness: number; // mm (e.g. 2.8)
+  textExtrusion: number; // mm (e.g. 1.2) - legacy alias for letterReliefHeight
+  letterReliefHeight?: number; // mm exact height of raised letters (e.g. 1.20)
+  flatBottom?: boolean; // Ensure 100% flat bottom on Z=0 for zero print-bed supports
   borderPadding: number; // mm
   holePosition: 'left' | 'right' | 'top' | 'none';
   holeDiameter: number; // mm (e.g. 4.0)
   reinforcedRing: boolean;
   // Flexi Articulated specific
   flexiSegmentStyle?: FlexiSegmentStyle;
-  flexiJointClearance: number; // mm clearance (e.g. 0.45)
-  flexiSegmentGap?: number; // mm spacing between letter edges (e.g. 4.8)
+  flexiJointClearance: number; // mm clearance (e.g. 0.85)
+  flexiSegmentGap?: number; // mm spacing between letter edges (e.g. 5.6)
   tailCharm: TailCharmType;
   previewFlexAngle?: number; // degrees (0 for flat print-bed, 10-35 for articulated live preview)
+  slicerLayerHeight?: number; // mm (e.g. 0.16, 0.20, 0.28)
+  // Custom 2nd Color Size / 3D Effect Ratio
+  letterScaleRatio?: number; // Factor (0.65 to 1.35, default 1.0): <1.0 = Menor que a base (moldura/degrau), >1.0 = Maior que a base (saliente/flutuante 3D)
+  letterSizePreset?: 'inset-frame' | 'slight-inset' | 'standard' | 'outset-bold' | 'ultra-pop' | 'custom';
   // QR code specific
   qrContent: string;
   qrSize: number;
